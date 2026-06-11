@@ -1,0 +1,24 @@
+appId: com.weethub.timesheet
+productName: Weethub Timesheet
+
+directories:
+  output: dist
+
+files:
+  - main.js
+  - preload.js
+  - preload-pip.js
+  - package.json
+  - assets/**
+
+win:
+  target: nsis
+  icon: assets/icon.ico
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  installerIcon: assets/icon.ico
+  uninstallerIcon: assets/icon.ico
