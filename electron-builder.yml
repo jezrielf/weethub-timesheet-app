@@ -22,3 +22,9 @@ nsis:
   createStartMenuShortcut: true
   installerIcon: assets/icon.ico
   uninstallerIcon: assets/icon.ico
+
+publish:
+  provider: github
+  owner: jezrielf
+  repo: weethub-timesheet-app
+  private: false

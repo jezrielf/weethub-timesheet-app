@@ -2,18 +2,15 @@
 
 const { contextBridge, ipcRenderer } = require('electron');
 
-const LS_KEY = 'weethub_horas_timer';
+const LS_KEY       = 'weethub_horas_timer';
 const LS_IDLE_FLAG = 'weethub_idle_pause';
 
-// Assinatura do timer ativo (clienteId:startedAt). Abre o PiP quando muda:
-// timer novo, troca de cliente, retomada — e também timer já rodando na
-// abertura do app. Não reabre sozinho se o usuário fechou o PiP sem mexer
-// no timer.
-let lastSig = null;
+let lastSig      = null; // assinatura do timer ativo — reabre o PiP quando muda
+let lastStateSig = null; // assinatura para detectar mudanças e atualizar o tray
 
 contextBridge.exposeInMainWorld('electronAPI', {
-  openPip: () => ipcRenderer.send('open-pip'),
-  closePip: () => ipcRenderer.send('close-pip'),
+  openPip:     () => ipcRenderer.send('open-pip'),
+  closePip:    () => ipcRenderer.send('close-pip'),
   onPipClosed: (cb) => ipcRenderer.on('pip-closed', (_event) => cb()),
 });
 
@@ -22,14 +19,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
 function playBeep(type) {
   try {
     const ctx = new AudioContext();
+    // pause: dois tons descendentes  |  return: dois tons ascendentes
     const tones = type === 'pause'
-      // Dois tons descendentes — sinaliza pausa
       ? [{ t: 0, freq: 560 }, { t: 0.22, freq: 380 }]
-      // Dois tons ascendentes — chama atenção ao retorno
       : [{ t: 0, freq: 440 }, { t: 0.22, freq: 660 }];
 
     for (const { t, freq } of tones) {
-      const osc = ctx.createOscillator();
+      const osc  = ctx.createOscillator();
       const gain = ctx.createGain();
       osc.connect(gain);
       gain.connect(ctx.destination);
@@ -43,11 +39,63 @@ function playBeep(type) {
   } catch {}
 }
 
+// ─── Timer toggle (shortcut Ctrl+Shift+P / tray) ──────────────────────────────
+
+ipcRenderer.on('shortcut-toggle', () => {
+  try {
+    const raw   = localStorage.getItem(LS_KEY);
+    const state = raw ? JSON.parse(raw) : null;
+    if (!state) return;
+
+    if (state.isRunning) {
+      const msTotais = state.accumulatedMs + (Date.now() - state.startedAt);
+      localStorage.setItem(LS_KEY, JSON.stringify({
+        ...state,
+        isRunning: false,
+        accumulatedMs: msTotais,
+        pendingSave: true,
+        saveAction: 'pausar',
+        savedAt: Date.now(),
+      }));
+    } else {
+      localStorage.setItem(LS_KEY, JSON.stringify({
+        ...state,
+        isRunning: true,
+        startedAt: Date.now(),
+        pendingSave: false,
+      }));
+    }
+  } catch {}
+});
+
+// ─── Timer confirm (shortcut Ctrl+Shift+C / tray) ─────────────────────────────
+
+ipcRenderer.on('shortcut-confirm', () => {
+  try {
+    const raw   = localStorage.getItem(LS_KEY);
+    const state = raw ? JSON.parse(raw) : null;
+    if (!state) return;
+
+    const msTotais = state.isRunning
+      ? state.accumulatedMs + (Date.now() - state.startedAt)
+      : state.accumulatedMs;
+
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      ...state,
+      isRunning: false,
+      accumulatedMs: msTotais,
+      pendingSave: true,
+      saveAction: 'finalizar',
+      savedAt: Date.now(),
+    }));
+  } catch {}
+});
+
 // ─── Idle auto-pause ──────────────────────────────────────────────────────────
 
 ipcRenderer.on('idle-auto-pause', () => {
   try {
-    const raw = localStorage.getItem(LS_KEY);
+    const raw   = localStorage.getItem(LS_KEY);
     const state = raw ? JSON.parse(raw) : null;
     if (!state || !state.isRunning) return;
 
@@ -60,7 +108,7 @@ ipcRenderer.on('idle-auto-pause', () => {
       saveAction: 'pausar',
       savedAt: Date.now(),
     }));
-    // Marca que a pausa foi automática — usado no retorno para exibir o dialog
+    // Marca a pausa como automática — exibe o dialog no retorno
     localStorage.setItem(LS_IDLE_FLAG, 'true');
     playBeep('pause');
   } catch {}
@@ -74,12 +122,12 @@ ipcRenderer.on('idle-return', (_event, { idleMs }) => {
     if (!wasIdle) return;
     localStorage.removeItem(LS_IDLE_FLAG);
 
-    const raw = localStorage.getItem(LS_KEY);
+    const raw   = localStorage.getItem(LS_KEY);
     const state = raw ? JSON.parse(raw) : null;
     if (!state) return;
 
     playBeep('return');
-    showIdleDialog(idleMs, state);
+    showIdleDialog(idleMs);
   } catch {}
 });
 
@@ -91,7 +139,7 @@ function formatIdleTime(ms) {
   return m > 0 ? `${h}h ${m}min` : `${h}h`;
 }
 
-function showIdleDialog(idleMs, pausedState) {
+function showIdleDialog(idleMs) {
   const existing = document.getElementById('__weethub_idle_dialog');
   if (existing) existing.remove();
 
@@ -137,25 +185,28 @@ function showIdleDialog(idleMs, pausedState) {
 
   document.getElementById('__idle_sim').addEventListener('click', () => {
     try {
-      const raw = localStorage.getItem(LS_KEY);
+      const raw   = localStorage.getItem(LS_KEY);
       const state = raw ? JSON.parse(raw) : null;
       if (state) {
         localStorage.setItem(LS_KEY, JSON.stringify({
           ...state,
           isRunning: true,
           startedAt: Date.now(),
-          // Adiciona o tempo ausente ao acumulado
           accumulatedMs: state.accumulatedMs + idleMs,
           pendingSave: false,
         }));
       }
+      ipcRenderer.send('show-notification', {
+        title: 'Timer retomado',
+        body:  `${idleStr} adicionados ao registro.`,
+      });
     } catch {}
     overlay.remove();
   });
 
   document.getElementById('__idle_nao').addEventListener('click', () => {
     try {
-      const raw = localStorage.getItem(LS_KEY);
+      const raw   = localStorage.getItem(LS_KEY);
       const state = raw ? JSON.parse(raw) : null;
       if (state) {
         localStorage.setItem(LS_KEY, JSON.stringify({
@@ -165,19 +216,26 @@ function showIdleDialog(idleMs, pausedState) {
           pendingSave: false,
         }));
       }
+      ipcRenderer.send('show-notification', {
+        title: 'Timer retomado',
+        body:  'Retomando do ponto atual.',
+      });
     } catch {}
     overlay.remove();
   });
 }
 
-// ─── Monitor localStorage for timer start → auto-open pip window ─────────────
+// ─── Monitor de localStorage ──────────────────────────────────────────────────
+// • Detecta timer iniciado → abre PiP automaticamente
+// • Detecta mudanças de estado → atualiza tray via IPC
 
-// Monitor localStorage for timer start → auto-open pip window
 window.addEventListener('DOMContentLoaded', () => {
   setInterval(() => {
     try {
-      const raw = localStorage.getItem(LS_KEY);
+      const raw   = localStorage.getItem(LS_KEY);
       const state = raw ? JSON.parse(raw) : null;
+
+      // Abre PiP quando o timer inicia ou troca de cliente
       if (state && state.isRunning) {
         const sig = `${state.clienteId}:${state.startedAt}`;
         if (sig !== lastSig) {
@@ -187,8 +245,15 @@ window.addEventListener('DOMContentLoaded', () => {
       } else if (!state) {
         lastSig = null;
       }
-    } catch {
-      // ignore
-    }
+
+      // Atualiza tray quando o estado muda
+      const stateSig = state
+        ? `${state.isRunning}:${state.clienteId}:${state.accumulatedMs}`
+        : null;
+      if (stateSig !== lastStateSig) {
+        lastStateSig = stateSig;
+        ipcRenderer.send('timer-state-update', state);
+      }
+    } catch {}
   }, 500);
 });
