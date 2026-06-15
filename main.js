@@ -2,7 +2,7 @@
 
 const {
   app, BrowserWindow, ipcMain, screen,
-  powerMonitor, Tray, Menu, Notification, globalShortcut,
+  powerMonitor, Tray, Menu, Notification, globalShortcut, nativeImage,
 } = require('electron');
 const path = require('path');
 
@@ -23,6 +23,7 @@ let tray     = null;
 let quitting = false;
 
 let timerState   = null; // último estado recebido do preload via IPC
+let thumbIcons   = null; // NativeImages para thumbnail toolbar (carregados uma vez)
 let autoPausedAt = null; // não-nulo → auto-pause ativo (idle ou suspend)
 let suspendedAt  = null; // não-nulo → sistema em suspend
 
@@ -42,6 +43,46 @@ function notify(title, body) {
   if (Notification.isSupported()) {
     new Notification({ title, body, icon: path.join(__dirname, 'assets', 'icon.ico') }).show();
   }
+}
+
+// ─── Thumbnail toolbar (miniatura da barra de tarefas) ────────────────────────
+
+function loadThumbIcons() {
+  thumbIcons = {
+    play:    nativeImage.createFromPath(path.join(__dirname, 'assets', 'toolbar-play.png')),
+    pause:   nativeImage.createFromPath(path.join(__dirname, 'assets', 'toolbar-pause.png')),
+    confirm: nativeImage.createFromPath(path.join(__dirname, 'assets', 'toolbar-confirm.png')),
+  };
+}
+
+function updateThumbarButtons() {
+  if (!mainWin || mainWin.isDestroyed() || !thumbIcons) return;
+  const s = timerState;
+  const buttons = [];
+
+  if (s && s.isRunning) {
+    buttons.push({
+      tooltip: 'Pausar  (Ctrl+Shift+P)',
+      icon:    thumbIcons.pause,
+      click:   () => mainWin?.webContents.send('shortcut-toggle'),
+    });
+  } else if (s && !s.isRunning) {
+    buttons.push({
+      tooltip: 'Retomar  (Ctrl+Shift+P)',
+      icon:    thumbIcons.play,
+      click:   () => mainWin?.webContents.send('shortcut-toggle'),
+    });
+  }
+
+  if (s) {
+    buttons.push({
+      tooltip: 'Confirmar  (Ctrl+Shift+C)',
+      icon:    thumbIcons.confirm,
+      click:   () => mainWin?.webContents.send('shortcut-confirm'),
+    });
+  }
+
+  mainWin.setThumbarButtons(buttons);
 }
 
 // ─── Tray ─────────────────────────────────────────────────────────────────────
@@ -123,6 +164,7 @@ function createMainWindow() {
   mainWin.loadURL(HORAS_URL);
 
   mainWin.webContents.on('did-finish-load', () => {
+    updateThumbarButtons();
     mainWin.webContents.executeJavaScript(`
       (function () {
         try {
@@ -196,10 +238,11 @@ ipcMain.on('pip-resize', (_event, height) => {
   }
 });
 
-// Estado do timer enviado pelo preload — mantém o tray sincronizado
+// Estado do timer enviado pelo preload — mantém tray e thumbnail toolbar sincronizados
 ipcMain.on('timer-state-update', (_event, state) => {
   timerState = state;
   if (tray && !tray.isDestroyed()) tray.setContextMenu(buildTrayMenu());
+  updateThumbarButtons();
 });
 
 // Notificação solicitada pelo preload (ex: dialog de retorno respondido)
@@ -295,6 +338,7 @@ if (!gotLock) {
   });
 
   app.whenReady().then(() => {
+    loadThumbIcons();
     createMainWindow();
     createTray();
     startIdleMonitor();

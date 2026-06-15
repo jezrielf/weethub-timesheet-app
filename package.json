@@ -1,13 +1,13 @@
 {
   "name": "weethub-timesheet",
-  "version": "1.1.3",
+  "version": "1.1.4",
   "description": "Weethub Timesheet App",
   "author": "Weethub",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build": "electron-builder --win --x64",
-    "publish": "electron-builder --win --x64 --publish always",
+    "build": "node scripts/gen-toolbar-icons.mjs && electron-builder --win --x64",
+    "publish": "node scripts/gen-toolbar-icons.mjs && electron-builder --win --x64 --publish always",
     "gen-assets": "node scripts/gen-ico.mjs"
   },
   "dependencies": {
