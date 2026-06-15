@@ -279,14 +279,30 @@ function setupAutoUpdater() {
 app.on('before-quit', () => { quitting = true; });
 app.on('will-quit',   () => globalShortcut.unregisterAll());
 
-app.whenReady().then(() => {
-  createMainWindow();
-  createTray();
-  startIdleMonitor();
-  registerShortcuts();
-  setupAutoUpdater();
-  app.on('activate', () => { mainWin ? mainWin.show() : createMainWindow(); });
-});
+// Garante uma única instância — se o usuário abrir pelo atalho com o app já
+// rodando (janela escondida no tray), mostra a janela existente em vez de
+// criar uma nova (que usaria um perfil temporário e perderia a sessão).
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (mainWin) {
+      if (mainWin.isMinimized()) mainWin.restore();
+      mainWin.show();
+      mainWin.focus();
+    }
+  });
+
+  app.whenReady().then(() => {
+    createMainWindow();
+    createTray();
+    startIdleMonitor();
+    registerShortcuts();
+    setupAutoUpdater();
+    app.on('activate', () => { mainWin ? mainWin.show() : createMainWindow(); });
+  });
+}
 
 // Com tray o app não fecha quando a janela some — só quando quitting=true
 app.on('window-all-closed', () => {
