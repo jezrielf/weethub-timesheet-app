@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, screen } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, powerMonitor } = require('electron');
 const path = require('path');
 
 const HORAS_URL = 'https://dash.weethub.com.br/horas';
@@ -113,10 +113,37 @@ ipcMain.on('pip-resize', (_event, height) => {
   }
 });
 
+// ─── Idle detection ───────────────────────────────────────────────────────────
+// Pausa o timer automaticamente após IDLE_THRESHOLD_S segundos sem input.
+// Quando o usuário volta, avisa a janela principal para mostrar o dialog.
+
+const IDLE_THRESHOLD_S = 5 * 60; // 5 minutos
+let idleWasPaused = false;
+let idlePausedAt = null;
+
+function startIdleMonitor() {
+  setInterval(() => {
+    if (!mainWin || mainWin.isDestroyed()) return;
+    const idleSec = powerMonitor.getSystemIdleTime();
+
+    if (!idleWasPaused && idleSec >= IDLE_THRESHOLD_S) {
+      idleWasPaused = true;
+      idlePausedAt = Date.now();
+      mainWin.webContents.send('idle-auto-pause');
+    } else if (idleWasPaused && idleSec < 10) {
+      const idleMs = idlePausedAt ? (Date.now() - idlePausedAt) : (IDLE_THRESHOLD_S * 1000);
+      idleWasPaused = false;
+      idlePausedAt = null;
+      mainWin.webContents.send('idle-return', { idleMs });
+    }
+  }, 10_000);
+}
+
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 
 app.whenReady().then(() => {
   createMainWindow();
+  startIdleMonitor();
   app.on('activate', () => {
     if (!mainWin) createMainWindow();
   });
