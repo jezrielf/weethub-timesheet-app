@@ -1,6 +1,6 @@
 {
   "name": "weethub-timesheet",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Weethub Timesheet App",
   "author": "Weethub",
   "main": "main.js",
