@@ -28,3 +28,4 @@ publish:
   owner: jezrielf
   repo: weethub-timesheet-app
   private: false
+  releaseType: release
