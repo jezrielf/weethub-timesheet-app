@@ -259,7 +259,7 @@ function initPipUI() {
   const style = document.createElement('style');
   style.textContent = `
     * { margin:0; padding:0; box-sizing:border-box;
-        font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; }
+        font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Segoe UI Emoji','Segoe UI Symbol',sans-serif; }
     html, body { width:100%; height:100%; overflow:hidden; background:#fff; }
     body { display:flex; flex-direction:column; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }

@@ -53,17 +53,17 @@ function buildTrayMenu() {
   if (s && s.isRunning) {
     const elapsed = s.accumulatedMs + (Date.now() - s.startedAt);
     items.push(
-      { label: `⏱  ${formatMs(elapsed)}  ·  ${(s.clienteNome || '').slice(0, 24)}`, enabled: false },
+      { label: `${formatMs(elapsed)}  —  ${(s.clienteNome || '').slice(0, 24)}`, enabled: false },
       { type: 'separator' },
-      { label: '⏸  Pausar          Ctrl+Shift+P', click: () => mainWin?.webContents.send('shortcut-toggle')  },
-      { label: '✓  Confirmar      Ctrl+Shift+C',  click: () => mainWin?.webContents.send('shortcut-confirm') },
+      { label: 'Pausar        Ctrl+Shift+P', click: () => mainWin?.webContents.send('shortcut-toggle')  },
+      { label: 'Confirmar  Ctrl+Shift+C',    click: () => mainWin?.webContents.send('shortcut-confirm') },
     );
   } else if (s && !s.isRunning) {
     items.push(
-      { label: `⏸  ${formatMs(s.accumulatedMs)}  ·  ${(s.clienteNome || '').slice(0, 24)}`, enabled: false },
+      { label: `Pausado  ${formatMs(s.accumulatedMs)}  —  ${(s.clienteNome || '').slice(0, 24)}`, enabled: false },
       { type: 'separator' },
-      { label: '▶  Retomar        Ctrl+Shift+P',  click: () => mainWin?.webContents.send('shortcut-toggle')  },
-      { label: '✓  Confirmar      Ctrl+Shift+C',  click: () => mainWin?.webContents.send('shortcut-confirm') },
+      { label: 'Retomar       Ctrl+Shift+P', click: () => mainWin?.webContents.send('shortcut-toggle')  },
+      { label: 'Confirmar  Ctrl+Shift+C',    click: () => mainWin?.webContents.send('shortcut-confirm') },
     );
   } else {
     items.push({ label: 'Nenhum timer ativo', enabled: false });
