@@ -286,6 +286,16 @@ function startIdleMonitor() {
     suspendedAt = null;
     triggerReturn();
   });
+
+  // Desligar/reiniciar o sistema (Linux/macOS emitem 'shutdown'; no Windows o
+  // processo é morto sem evento — nesse caso a rede de segurança é o cap de
+  // tempo offline no hook useHorasTimer, que ao reabrir desconta o intervalo
+  // não-monitorado em vez de contar o tempo desligado).
+  powerMonitor.on('shutdown', () => {
+    if (timerState && timerState.isRunning) {
+      mainWin?.webContents.send('idle-auto-pause');
+    }
+  });
 }
 
 // ─── Global shortcuts ─────────────────────────────────────────────────────────

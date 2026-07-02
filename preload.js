@@ -91,6 +91,30 @@ ipcRenderer.on('shortcut-confirm', () => {
   } catch {}
 });
 
+// ─── Fechar o PiP = pausar o timer ─────────────────────────────────────────────
+// Quando a janela PiP nativa é fechada com o timer rodando, o main envia
+// 'pip-closed'. Escrevemos a flag de pausa (o hook useHorasTimer da janela
+// principal grava o delta no banco). Não pausa se o timer já foi finalizado.
+
+ipcRenderer.on('pip-closed', () => {
+  try {
+    const raw   = localStorage.getItem(LS_KEY);
+    const state = raw ? JSON.parse(raw) : null;
+    if (!state || !state.isRunning) return;
+
+    const msTotais = state.accumulatedMs + (Date.now() - state.startedAt);
+    localStorage.setItem(LS_KEY, JSON.stringify({
+      ...state,
+      isRunning: false,
+      accumulatedMs: msTotais,
+      lastHeartbeatAt: Date.now(),
+      pendingSave: true,
+      saveAction: 'pausar',
+      savedAt: Date.now(),
+    }));
+  } catch {}
+});
+
 // ─── Idle auto-pause ──────────────────────────────────────────────────────────
 
 ipcRenderer.on('idle-auto-pause', () => {

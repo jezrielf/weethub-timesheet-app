@@ -4,6 +4,44 @@ const { ipcRenderer } = require('electron');
 
 const LS_KEY = 'weethub_horas_timer';
 const LS_CLIENTES_KEY = 'weethub_horas_clientes';
+const SAVE_URL = '/horas/api/save'; // relativo a dash.weethub.com.br (mesma origem)
+
+// ─── Save direto (beacon) ───────────────────────────────────────────────────
+// Grava o delta (total − savedMs) direto no banco a partir do PiP, sem depender
+// do poll da janela principal. Retorna o novo savedMs a persistir no
+// localStorage (ledger de idempotência — o hook então vê delta 0).
+
+function buildDelta(state) {
+  if (!state || !state.colaboradorId || !state.clienteId) return null;
+  const total = state.isRunning
+    ? state.accumulatedMs + (Date.now() - state.startedAt)
+    : state.accumulatedMs;
+  if (total < 10000) return null;
+  const already = state.savedMs || 0;
+  const delta = total - already;
+  if (delta < 1) return null;
+  const d = new Date();
+  const competencia = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+  return {
+    payload: {
+      colaboradorId: state.colaboradorId,
+      clienteId: state.clienteId,
+      competencia,
+      horas: parseFloat((delta / 3600000).toFixed(4)),
+    },
+    newSavedMs: total,
+  };
+}
+
+function flushBeacon(state) {
+  const r = buildDelta(state);
+  if (!r) return (state && state.savedMs) || 0;
+  try {
+    const blob = new Blob([JSON.stringify(r.payload)], { type: 'application/json' });
+    navigator.sendBeacon(SAVE_URL, blob);
+  } catch {}
+  return r.newSavedMs;
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -49,10 +87,13 @@ function doToggle() {
   if (!state) return;
   if (state.isRunning) {
     const msTotais = state.accumulatedMs + (Date.now() - state.startedAt);
+    const newSaved = flushBeacon(state);
     localStorage.setItem(LS_KEY, JSON.stringify({
       ...state,
       isRunning: false,
       accumulatedMs: msTotais,
+      savedMs: newSaved,
+      lastHeartbeatAt: Date.now(),
       pendingSave: true,
       saveAction: 'pausar',
       savedAt: Date.now(),
@@ -62,6 +103,7 @@ function doToggle() {
       ...state,
       isRunning: true,
       startedAt: Date.now(),
+      lastHeartbeatAt: Date.now(),
       pendingSave: false,
     }));
   }
@@ -77,10 +119,12 @@ function doFinalizar() {
     const msTotais = state.isRunning
       ? state.accumulatedMs + (Date.now() - state.startedAt)
       : state.accumulatedMs;
+    const newSaved = flushBeacon(state);
     localStorage.setItem(LS_KEY, JSON.stringify({
       ...state,
       isRunning: false,
       accumulatedMs: msTotais,
+      savedMs: newSaved,
       pendingSave: true,
       saveAction: 'finalizar',
       savedAt: Date.now(),
@@ -116,13 +160,18 @@ function doSelectCliente(id, nome, servico) {
     colaboradorId: state?.colaboradorId ?? '',
     startedAt: Date.now(),
     accumulatedMs: 0,
+    savedMs: 0,
+    lastHeartbeatAt: Date.now(),
   };
 
   if (state && state.clienteId !== id && msTotais >= 10_000) {
+    const newSaved = flushBeacon(state);
     localStorage.setItem(LS_KEY, JSON.stringify({
       ...state,
       isRunning: false,
       accumulatedMs: msTotais,
+      savedMs: newSaved,
+      lastHeartbeatAt: Date.now(),
       pendingSave: true,
       saveAction: 'trocar',
       savedAt: Date.now(),
